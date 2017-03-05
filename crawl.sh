@@ -1,3 +1,3 @@
 #!/bin/sh
-scrapy crawl SafariBooks -a user=$1 -a password=$2 -a bookid=$3
+scrapy crawl SafariBooks -a bookid=$1
 kindlegen *.epub

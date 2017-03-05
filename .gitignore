@@ -5,3 +5,4 @@ output/
 *.mobi
 *.pyc
 */*.pyc
+.DS_Store

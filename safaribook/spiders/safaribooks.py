@@ -1,19 +1,15 @@
 import os
 import re
-import ast
 import shutil
 from functools import partial
 import codecs
+import json
 
 import scrapy
-from scrapy.selector import Selector
-from scrapy.http import HtmlResponse
-from scrapy.shell import inspect_response
 from jinja2 import Template
 from BeautifulSoup import BeautifulSoup
 
-null = None
-false = False
+from pycookiecheat import chrome_cookies
 
 PAGE_TEMPLATE="""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
@@ -24,15 +20,11 @@ PAGE_TEMPLATE="""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 </html>"""
 
 class SafariBooksSpider(scrapy.Spider):
-  toc_url = 'https://www.safaribooksonline.com/nest/epub/toc/?book_id='
   name = "SafariBooks"
-  #allowed_domains = []
-  start_urls = ["https://www.safaribooksonline.com/"]
+  toc_url = 'https://www.safaribooksonline.com/nest/epub/toc/?book_id='
   host = "https://www.safaribooksonline.com/"
 
-  def __init__(self, user='', password='', bookid=''):
-    self.user = user
-    self.password = password
+  def __init__(self, bookid=''):
     self.bookid = bookid
     self.book_name = ''
     self.info = {}
@@ -42,20 +34,14 @@ class SafariBooksSpider(scrapy.Spider):
     shutil.rmtree('output/')
     shutil.copytree('data/', 'output/')
 
-  def parse(self, response):
-    return scrapy.FormRequest.from_response(
-      response,
-      formdata={"email": self.user, "password1": self.password},
-      callback=self.after_login)
+  def start_requests(self):
+    yield scrapy.Request(self.host, cookies=chrome_cookies(self.host), 
+            callback=self.parse)
 
-  def after_login(self, response):
-    if not 'Recommended For You' in response.body:
-      self.logger.error("Failed login")
-      return
+  def parse(self, resposne):
     yield scrapy.Request(self.toc_url+self.bookid, callback=self.parse_toc)
 
   def parse_cover_img(self, name, response):
-    #inspect_response(response, self)
     with open("./output/OEBPS/cover-image.jpg", "w") as f:
       f.write(response.body)
 
@@ -70,7 +56,7 @@ class SafariBooksSpider(scrapy.Spider):
       f.write(response.body)
 
   def parse_page_json(self, title, bookid, response):
-    page_json = eval(response.body)
+    page_json = json.loads(response.body)
     yield scrapy.Request(page_json["content"], callback=partial(self.parse_page, title, bookid, page_json["full_path"]))
 
   def parse_page(self, title, bookid, path, response):
@@ -85,7 +71,7 @@ class SafariBooksSpider(scrapy.Spider):
                              callback=partial(self.parse_content_img, img))
 
   def parse_toc(self, response):
-    toc = eval(response.body)
+    toc = json.loads(response.body)
     self.book_name = toc['title_safe']
     cover_path, = re.match(r'<img src="(.*?)" alt.+', toc["thumbnail_tag"]).groups()
     yield scrapy.Request(self.host + cover_path,
